@@ -1,130 +1,18 @@
-<!DOCTYPE html>
+﻿<!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Autopay Guard: stay ahead of every automatic payment</title>
-<link rel="stylesheet" href="base.css">
-<style>
-:root{--accent:#0f6b5c;--accent-soft:#dff1ec}
-.layout{display:grid;grid-template-columns:400px 1fr;gap:18px;align-items:start}@media(max-width:860px){.layout{grid-template-columns:1fr}}
-.phone{margin:0}.scroll{height:680px;overflow:auto;padding:14px}.hero{background:var(--accent);color:#fff;border-radius:16px;padding:14px;cursor:pointer;border:0;width:100%;text-align:left}
-.hero b{font-size:28px;display:block}.hero small{color:#cfe9e3}
-.item{display:flex;gap:10px;align-items:center;padding:11px 4px;border:0;border-bottom:1px solid var(--line);background:none;width:100%;text-align:left;border-radius:0}
-.item .av{width:36px;height:36px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:700;flex:none}
-.item .amt{margin-left:auto;text-align:right;white-space:nowrap}.alert{border:1px solid #efd9a8;background:var(--warn-soft);border-radius:12px;padding:10px;margin:8px 0;width:100%;text-align:left;display:block}
-.alert b{display:block}.seg{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}.seg button[aria-pressed=true]{background:var(--accent);color:#fff;border-color:var(--accent)}
-.sheet h2{margin-top:0}.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px;margin:8px 0}.kv span:nth-child(odd){color:var(--muted)}
-.task{background:#fff;border:2px solid var(--accent);border-radius:12px;padding:12px}
-</style>
-</head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#12594d"><title>Autopay Guard — stay ahead of every payment</title><link rel="stylesheet" href="base.css"><script defer src="logic.js"></script><script defer src="app.js"></script></head>
 <body>
-<div class="concept">Concept prototype for a product case study. All merchants and amounts are made up. Not a real payments app.</div>
-<div class="wrap">
-  <header class="top"><div><h1>Autopay Guard</h1><small>Not another list of mandates: a heads-up before money leaves</small></div></header>
-  <div class="layout">
-    <div class="phone" id="phone">
-      <div class="scroll" id="home"></div>
-    </div>
-    <div>
-      <div class="card">
-        <h3>Usability test</h3>
-        <p class="muted">Hand the phone view to a participant. Five tasks, timed, with success checked automatically.</p>
-        <div class="row"><input id="pid" placeholder="Participant code, e.g. P03" maxlength="12"><button class="primary" id="startTest">Start test</button></div>
-        <div id="taskBox" class="task hidden" style="margin-top:10px"></div>
-        <div id="testDone" class="hidden" style="margin-top:10px"><table id="testTable"></table><div class="row" style="margin-top:8px"><button class="primary" id="dlTest">Download results (CSV)</button><button class="ghost" id="dlAllTest">All participants on this device</button></div></div>
-      </div>
-      <div class="card">
-        <div class="row"><h3 class="grow">Event log</h3><button class="ghost" id="resetData">Reset demo data</button></div>
-        <p class="muted">Each line is an analytics event the real product would send.</p>
-        <div class="log" id="log"></div>
-      </div>
-    </div>
-  </div>
-</div>
-<script src="logic.js"></script>
-<script>
-const G = Guard, $ = id => document.getElementById(id);
-const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const store = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
-const rupee = n => '₹' + Math.round(n).toLocaleString('en-IN');
-const when = d => d <= 0 ? 'today' : d === 1 ? 'tomorrow' : 'in ' + d + ' days';
-const dateIn = d => new Date(Date.now() + d * 864e5).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-let list = G.seed(), events = [], test = null, toastTimer = null, dismissed = [];
-function track(name, data) { events.push(Object.assign({ t: Date.now(), name }, data || {})); $('log').textContent = events.slice(-40).map(e => `${new Date(e.t).toLocaleTimeString('en-IN')}  ${e.name}${e.id ? '  id=' + e.id : ''}${e.detail ? '  ' + e.detail : ''}`).join('\n'); $('log').scrollTop = 1e6; if (test) { test.taps++; checkTask(); } }
-const name = id => list.find(m => m.id === id).merchant;
-
-function renderHome() {
-  const ins = G.insights(list).filter(i => !dismissed.includes(i.kind + i.id)), up = G.upcoming(list, 7), act = list.filter(m => m.status === 'active'), paused = list.filter(m => m.status === 'paused');
-  const row = m => `<button class="item" data-open="${m.id}"><span class="av">${esc(m.merchant[0])}</span><span><b>${esc(m.merchant)}</b><br><small>${m.status === 'paused' ? 'Paused' : 'Next ' + when(m.nextInDays) + ' · ' + m.freq}${m.via !== 'This app' ? ' · set up in another app' : ''}</small></span><span class="amt"><b>${m.variable ? 'up to ' + rupee(m.maxAmount) : rupee(m.amount)}</b></span></button>`;
-  $('home').innerHTML = `
-    <button class="hero" id="hero"><small>Autopay in a typical month</small><b>${rupee(G.monthlyTotal(list))}</b><small>${rupee(G.dueTotal(list, 7))} leaves in the next 7 days · tap for breakdown</small></button>
-    ${ins.length ? `<h2>Needs a look (${ins.length})</h2>` + ins.map(i => `<button class="alert" data-open="${i.id}" data-kind="${i.kind}"><b>${esc(i.title)}</b><small>${esc(i.body)}</small></button>`).join('') : ''}
-    <h2>Next 7 days</h2>${up.map(row).join('') || '<small>Nothing due.</small>'}
-    <h2>All active (${act.length})</h2>${act.slice().sort((a, b) => G.monthly(b) - G.monthly(a)).map(row).join('')}
-    ${paused.length ? '<h2>Paused</h2>' + paused.map(row).join('') : ''}`;
-  $('hero').onclick = () => { track('open_breakdown'); openBreakdown(); };
-  $('home').querySelectorAll('[data-open]').forEach(b => b.onclick = () => { const id = Number(b.dataset.open); track(b.dataset.kind ? 'insight_tap' : 'open_mandate', { id, detail: b.dataset.kind || '' }); openDetail(id, b.dataset.kind); });
-}
-function sheet(html) { closeSheet(); const bg = document.createElement('div'); bg.className = 'sheet-bg'; bg.id = 'sheetBg'; bg.innerHTML = `<div class="sheet" role="dialog" aria-modal="true">${html}</div>`; bg.onclick = e => { if (e.target === bg) { track('sheet_dismiss'); closeSheet(); } }; $('phone').appendChild(bg); return bg; }
-function closeSheet() { const s = $('sheetBg'); if (s) s.remove(); }
-function toast(msg, undo) { const old = $('toast'); if (old) old.remove(); clearTimeout(toastTimer); const t = document.createElement('div'); t.className = 'toast'; t.id = 'toast'; t.setAttribute('role', 'status'); t.innerHTML = `<span class="grow">${esc(msg)}</span>${undo ? '<button>Undo</button>' : ''}`; if (undo) t.querySelector('button').onclick = () => { undo(); t.remove(); }; $('phone').appendChild(t); toastTimer = setTimeout(() => t.remove(), 5000); }
-function apply(next, eventName, id, msg, detail) { const prev = list; list = next; track(eventName, { id, detail }); closeSheet(); renderHome(); toast(msg, () => { list = prev; track('undo', { id, detail: eventName }); renderHome(); }); }
-
-function openBreakdown() {
-  const cats = G.byCategory(list), total = G.monthlyTotal(list);
-  sheet(`<h2>Where ${rupee(total)} a month goes</h2><table>${cats.map(c => `<tr><td>${esc(c.category)}</td><td class="num">${rupee(c.amount)}</td><td class="num">${Math.round(c.amount / total * 100)}%</td></tr>`).join('')}</table><small>Yearly and weekly payments are converted to a monthly figure.</small><div class="row" style="margin-top:10px"><button class="primary" id="x">Close</button></div>`).querySelector('#x').onclick = closeSheet;
-}
-function openDetail(id, kind) {
-  const m = list.find(x => x.id === id), ins = G.insights(list).filter(i => i.id === id);
-  const s = sheet(`<h2>${esc(m.merchant)}</h2>
-    ${ins.map(i => `<div class="alert"><b>${esc(i.title)}</b><small>${esc(i.body)}</small></div>`).join('')}
-    <div class="kv"><span>Amount</span><span>${m.variable ? 'Varies, last ' + rupee(m.amount) : rupee(m.amount) + ' ' + m.freq}</span><span>Most it can take</span><span>${rupee(m.maxAmount)} per debit</span><span>Next debit</span><span>${m.status === 'paused' ? 'Paused, resumes ' + dateIn(m.resumeInDays || 30) : dateIn(m.nextInDays) + ' (' + when(m.nextInDays) + ')'}</span><span>Set up in</span><span>${esc(m.via)}</span></div>
-    <label>Remind me before each debit</label><div class="seg" id="rem">${[1, 3, 7].map(d => `<button aria-pressed="${m.reminderDays === d}" data-d="${d}">${d} day${d > 1 ? 's' : ''} before</button>`).join('')}</div>
-    <div class="row" style="margin-top:12px">${m.status === 'paused' ? '<button class="primary" id="resume">Resume</button>' : '<button id="pause">Pause</button>'}<button class="danger" id="cancel">Cancel autopay</button>${!m.variable && m.maxAmount > m.amount ? '<button id="cap">Limit to ' + rupee(m.amount) + '</button>' : ''}<button class="ghost" id="close">Close</button></div>`);
-  s.querySelectorAll('#rem button').forEach(b => b.onclick = () => { list = G.actions.remind(list, id, Number(b.dataset.d)); track('reminder_set', { id, detail: b.dataset.d + 'd' }); openDetail(id); renderHome(); });
-  s.querySelector('#close').onclick = () => { track('sheet_close'); closeSheet(); };
-  const q = sel => s.querySelector(sel);
-  if (q('#resume')) q('#resume').onclick = () => apply(G.actions.resume(list, id), 'resume', id, m.merchant + ' resumed');
-  if (q('#cap')) q('#cap').onclick = () => apply(G.actions.lowerCeiling(list, id), 'ceiling_lowered', id, `${m.merchant} can now take at most ${rupee(m.amount)}`);
-  if (q('#pause')) q('#pause').onclick = () => { track('pause_start', { id }); const p = sheet(`<h2>Pause ${esc(m.merchant)}</h2><p>No money is taken while paused. It restarts on its own.</p><div class="seg">${[1, 2, 3].map(c => `<button data-c="${c}">${c} ${m.freq === 'weekly' ? 'week' : m.freq === 'yearly' ? 'year' : 'month'}${c > 1 ? 's' : ''}</button>`).join('')}</div><button class="ghost" id="b">Back</button>`); p.querySelectorAll('[data-c]').forEach(b => b.onclick = () => apply(G.actions.pause(list, id, Number(b.dataset.c)), 'pause', id, `${m.merchant} paused`, b.dataset.c + ' cycle(s)')); p.querySelector('#b').onclick = () => openDetail(id); };
-  q('#cancel').onclick = () => { track('cancel_start', { id }); const c = sheet(`<h2>Cancel autopay for ${esc(m.merchant)}?</h2><p>No more automatic debits from today. ${m.essential ? '<b>This pays for ' + m.category.toLowerCase() + '.</b> Missing a payment can have consequences, so set up another way to pay if you still need it.' : 'Your plan with ' + esc(m.merchant) + ' may run until the period you already paid for ends.'}</p><div class="row"><button class="danger" id="y">Cancel autopay</button><button id="n">Keep it</button></div>`); c.querySelector('#y').onclick = () => apply(G.actions.cancel(list, id), 'cancel', id, `${m.merchant} autopay cancelled`); c.querySelector('#n').onclick = () => { track('cancel_abandon', { id }); openDetail(id); }; };
-}
-
-// ---------- usability test ----------
-function showTask() {
-  const t = G.TASKS[test.i];
-  $('taskBox').classList.remove('hidden');
-  $('taskBox').innerHTML = `<small>Task ${test.i + 1} of ${G.TASKS.length}</small><p style="font-weight:600">${esc(t.text)}</p><button class="ghost" id="giveUp">I can’t do this</button>`;
-  $('giveUp').onclick = () => endTask(false);
-  test.t0 = Date.now(); test.taps = 0; test.wrong = 0; test.mark = events.length;
-}
-function checkTask() {
-  if (!test || test.asking) return; const t = G.TASKS[test.i], recent = events.slice(test.mark), last = events[events.length - 1];
-  if (t.target && last.name === 'open_mandate' && last.id !== t.target) test.wrong++;
-  if (t.done(list, recent)) endTask(true);
-}
-function endTask(ok) {
-  const t = G.TASKS[test.i]; test.asking = true;
-  const rec = { participant: test.pid, task: t.id, success: ok ? 1 : 0, seconds: +((Date.now() - test.t0) / 1000).toFixed(1), taps: test.taps, wrong_opens: test.wrong };
-  $('taskBox').innerHTML = `<p style="font-weight:600">${ok ? 'Done.' : 'No problem.'} How easy was that?</p><div class="seg">${[1, 2, 3, 4, 5, 6, 7].map(n => `<button data-n="${n}">${n}</button>`).join('')}</div><small>1 = very hard, 7 = very easy</small>`;
-  $('taskBox').querySelectorAll('[data-n]').forEach(b => b.onclick = () => {
-    rec.ease = Number(b.dataset.n); test.rows.push(rec); test.asking = false;
-    if (++test.i < G.TASKS.length) showTask(); else finishTest();
-  });
-}
-function finishTest() {
-  const rows = test.rows; store.set('guard_tests', store.get('guard_tests', []).filter(r => r.participant !== test.pid).concat(rows));
-  $('taskBox').classList.add('hidden'); $('testDone').classList.remove('hidden');
-  $('testTable').innerHTML = '<tr><th>Task</th><th>Done</th><th class="num">Seconds</th><th class="num">Taps</th><th class="num">Wrong opens</th><th class="num">Ease</th></tr>' + rows.map(r => `<tr><td>${r.task}</td><td>${r.success ? 'yes' : 'no'}</td><td class="num">${r.seconds}</td><td class="num">${r.taps}</td><td class="num">${r.wrong_opens}</td><td class="num">${r.ease}</td></tr>`).join('');
-  const csv = rs => 'participant,task,success,seconds,taps,wrong_opens,ease\n' + rs.map(r => [r.participant, r.task, r.success, r.seconds, r.taps, r.wrong_opens, r.ease].join(',')).join('\n');
-  const dl = (n, t) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([t], { type: 'text/csv' })); a.download = n; document.body.appendChild(a); a.click(); a.remove(); };
-  $('dlTest').onclick = () => dl(`autopay_test_${rows[0].participant}.csv`, csv(rows)); $('dlAllTest').onclick = () => dl('autopay_test_all.csv', csv(store.get('guard_tests', [])));
-  test = null;
-}
-$('startTest').onclick = () => { list = G.seed(); dismissed = []; events = []; closeSheet(); renderHome(); $('testDone').classList.add('hidden'); test = { pid: $('pid').value.trim().replace(/[^A-Za-z0-9_-]/g, '') || 'P' + String(Date.now()).slice(-4), i: 0, rows: [], taps: 0, wrong: 0, asking: false }; showTask(); };
-$('resetData').onclick = () => { list = G.seed(); dismissed = []; events = []; $('log').textContent = ''; closeSheet(); renderHome(); };
-renderHome();
-</script>
-</body>
-</html>
+<a class="skip" href="#main">Skip to dashboard</a>
+<header class="header"><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">AG</span>Autopay Guard</a><nav aria-label="Help and settings"><button id="how">How it works</button><button id="reset" class="quiet">Reset</button></nav></header>
+<main id="main" class="wrap">
+<section class="intro"><div><p class="eyebrow">YOUR PAYMENTS. YOUR CALL.</p><h1>Stay ahead of<br>every autopay.</h1><p class="lead">For people juggling subscriptions, bills and SIPs.<br>Spot the surprises. Decide what leaves next.</p></div><div class="intro-action"><button id="example" class="primary">Try an example <span aria-hidden="true">↗</span></button><p>12 sample mandates. See every alert in action.</p></div></section>
+<p id="storageMessage" class="notice" role="status" hidden></p>
+<section id="summary" class="summary" aria-label="Payment overview"></section>
+<div class="dashboard"><section id="insights" aria-labelledby="insightTitle"><div class="section-heading"><div><p class="eyebrow">A LITTLE ATTENTION NOW</p><h2 id="insightTitle">Needs a look <span id="insightCount" class="count">0</span></h2></div></div><div id="insightCards" class="insight-grid"></div></section>
+<section id="mandates" aria-labelledby="mandateTitle"><div class="section-heading"><div><p class="eyebrow">THE FULL PICTURE</p><h2 id="mandateTitle">Your mandates</h2></div><button id="add">+ Add mandate</button></div><div class="toolbar"><label class="search">Search mandates<input id="search" type="search" placeholder="Merchant or category" maxlength="100"></label><label>Status<select id="filter"><option value="all">All statuses</option><option value="active">Active</option><option value="paused">Paused</option><option value="cancelled">Cancelled</option></select></label></div><div id="mandateList"></div></section></div>
+<p class="device-note">Saved on this device <span aria-hidden="true">·</span> <span id="saveState">Ready when you are</span></p>
+</main>
+<dialog id="modal" aria-labelledby="dialogTitle"></dialog>
+<div id="toast" class="toast" role="status" hidden></div>
+<dialog id="tour" class="tour" aria-labelledby="tourTitle"><p id="tourStep" class="eyebrow"></p><h2 id="tourTitle"></h2><p id="tourText"></p><div class="tour-actions"><button id="skipTour" class="quiet">Skip tour</button><button id="prevTour">Back</button><button id="nextTour" class="primary">Next</button></div></dialog>
+</body></html>
